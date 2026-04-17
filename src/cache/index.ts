@@ -1,0 +1,1 @@
+export { memoryCache } from "./memory";

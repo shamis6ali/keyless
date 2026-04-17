@@ -1,0 +1,54 @@
+{
+  "name": "keyless",
+  "version": "0.0.1",
+  "description": "A TypeScript-first secrets router for web and mobile applications",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
+  },
+  "peerDependencies": {
+    "zod": "^3.23.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "secrets",
+    "secret-manager",
+    "env",
+    "environment-variables",
+    "config",
+    "typescript",
+    "rotation",
+    "validation",
+    "zod"
+  ],
+  "packageManager": "pnpm@9.12.0"
+}
