@@ -1,5 +1,6 @@
 export { defineKeyless } from "./define";
-export { memoryCache } from "./cache/memory";
+export { memoryCache, fileCache } from "./cache";
+export type { FileCacheOptions } from "./cache";
 export {
   envProvider,
   dotenvProvider,
@@ -30,6 +31,8 @@ export type {
   TtlInput,
   KeylessMode,
   ErrorContext,
+  KeyOverride,
+  RefreshFn,
 } from "./types";
 export type {
   EnvProviderOptions,

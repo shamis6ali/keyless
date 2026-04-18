@@ -255,4 +255,74 @@ describe("defineKeyless", () => {
       }),
     ).toThrow(/at least one provider/);
   });
+
+  describe("automatic refresh", () => {
+    it("uses the refresh fn instead of providers when defined", async () => {
+      const providerGet = vi.fn();
+      const refresh = vi.fn().mockResolvedValue("refreshed-value");
+      const keys = defineKeyless({
+        schema: { TOKEN: z.string() },
+        providers: [{ name: "p", get: providerGet }],
+        overrides: { TOKEN: { refresh } },
+      });
+      expect(await keys.TOKEN()).toBe("refreshed-value");
+      expect(providerGet).not.toHaveBeenCalled();
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("validates refreshed values against the schema", async () => {
+      const keys = defineKeyless({
+        schema: { TOKEN: z.string().startsWith("tok_") },
+        providers: [fixtureProvider("unused", {})],
+        overrides: { TOKEN: { refresh: async () => "bad-prefix" } },
+      });
+      await expect(keys.TOKEN()).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it("wraps refresh fn failures in ProviderError with provider='refresh'", async () => {
+      const keys = defineKeyless({
+        schema: { TOKEN: z.string() },
+        providers: [fixtureProvider("unused", {})],
+        overrides: {
+          TOKEN: {
+            refresh: async () => {
+              throw new Error("auth server down");
+            },
+          },
+        },
+      });
+      try {
+        await keys.TOKEN();
+        expect.fail("should have thrown");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ProviderError);
+        expect((err as ProviderError).provider).toBe("refresh");
+      }
+    });
+
+    it("re-invokes refresh fn on manual refresh()", async () => {
+      let count = 0;
+      const refresh = vi.fn(async () => `tok_${++count}`);
+      const keys = defineKeyless({
+        schema: { TOKEN: z.string() },
+        providers: [fixtureProvider("unused", {})],
+        overrides: { TOKEN: { refresh } },
+      });
+      expect(await keys.TOKEN()).toBe("tok_1");
+      await keys.refresh("TOKEN");
+      expect(await keys.TOKEN()).toBe("tok_2");
+      expect(refresh).toHaveBeenCalledTimes(2);
+    });
+
+    it("marks inspect() provider as 'refresh' for refresh-backed keys", async () => {
+      const keys = defineKeyless({
+        schema: { TOKEN: z.string() },
+        providers: [fixtureProvider("gcp", {})],
+        overrides: { TOKEN: { refresh: async () => "v" } },
+      });
+      await keys.TOKEN();
+      const info = keys.inspect().find((k) => k.name === "TOKEN");
+      expect(info?.provider).toBe("refresh");
+    });
+  });
 });

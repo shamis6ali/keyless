@@ -59,30 +59,47 @@ export function defineKeyless<S extends SchemaMap>(options: KeylessOptions<S>): 
   async function fetchAndValidate(
     key: string,
   ): Promise<{ value: unknown; provider: string }> {
-    const tried: string[] = [];
+    const refreshFn = overrides?.[key as keyof S]?.refresh;
     let rawValue: string | undefined;
-    let source: Provider | null = null;
+    let sourceName: string | null = null;
 
-    for (const provider of providers) {
-      tried.push(provider.name);
+    if (refreshFn) {
       try {
-        const result = await provider.get(key);
-        if (result !== undefined) {
-          rawValue = result;
-          source = provider;
-          break;
-        }
+        rawValue = await refreshFn();
+        sourceName = "refresh";
       } catch (err) {
-        const providerErr = new ProviderError(provider.name, key, err);
-        onError?.(providerErr, { key, provider: provider.name });
+        const providerErr = new ProviderError("refresh", key, err);
+        onError?.(providerErr, { key, provider: "refresh" });
         throw providerErr;
       }
-    }
+      if (typeof rawValue !== "string" || rawValue.length === 0) {
+        const missing = new MissingSecretError(key, ["refresh"]);
+        onError?.(missing, { key, provider: "refresh" });
+        throw missing;
+      }
+    } else {
+      const tried: string[] = [];
+      for (const provider of providers) {
+        tried.push(provider.name);
+        try {
+          const result = await provider.get(key);
+          if (result !== undefined) {
+            rawValue = result;
+            sourceName = provider.name;
+            break;
+          }
+        } catch (err) {
+          const providerErr = new ProviderError(provider.name, key, err);
+          onError?.(providerErr, { key, provider: provider.name });
+          throw providerErr;
+        }
+      }
 
-    if (rawValue === undefined || !source) {
-      const missing = new MissingSecretError(key, tried);
-      onError?.(missing, { key });
-      throw missing;
+      if (rawValue === undefined || !sourceName) {
+        const missing = new MissingSecretError(key, tried);
+        onError?.(missing, { key });
+        throw missing;
+      }
     }
 
     const schemaForKey = schema[key];
@@ -94,11 +111,11 @@ export function defineKeyless<S extends SchemaMap>(options: KeylessOptions<S>): 
     if (!parsed.success) {
       const issues = parsed.error.issues.map((i) => i.message);
       const ve = new ValidationError(key, issues);
-      onError?.(ve, { key, provider: source.name });
+      onError?.(ve, { key, provider: sourceName });
       throw ve;
     }
 
-    return { value: parsed.data, provider: source.name };
+    return { value: parsed.data, provider: sourceName };
   }
 
   async function access(key: string): Promise<unknown> {

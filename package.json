@@ -9,9 +9,14 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     }
   },
   "files": [
@@ -23,7 +28,12 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "vitest bench --run",
+    "bench:report": "tsx scripts/bench-report.ts",
     "typecheck": "tsc --noEmit",
+    "size": "size-limit",
+    "check:package": "publint && attw --pack .",
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm size && pnpm check:package",
     "prepublishOnly": "pnpm build"
   },
   "peerDependencies": {
@@ -40,12 +50,21 @@
     "@azure/identity": { "optional": true }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.17.0",
     "@aws-sdk/client-secrets-manager": "^3.0.0",
     "@azure/identity": "^4.0.0",
     "@azure/keyvault-secrets": "^4.0.0",
     "@google-cloud/secret-manager": "^6.0.0",
+    "@size-limit/preset-small-lib": "^11.0.0",
+    "@t3-oss/env-core": "^0.11.0",
     "@types/node": "^22.0.0",
+    "dotenv": "^16.4.0",
+    "envalid": "^8.0.0",
+    "publint": "^0.3.0",
+    "size-limit": "^11.0.0",
+    "tinybench": "^2.9.0",
     "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
     "zod": "^3.23.8"
@@ -64,5 +83,26 @@
     "validation",
     "zod"
   ],
-  "packageManager": "pnpm@9.12.0"
+  "packageManager": "pnpm@9.12.0",
+  "size-limit": [
+    {
+      "name": "full package (ESM, gzipped)",
+      "path": "dist/index.js",
+      "ignore": ["node:fs", "node:fs/promises", "node:path", "fs", "fs/promises", "path"],
+      "limit": "8 KB"
+    },
+    {
+      "name": "full package (CJS, gzipped)",
+      "path": "dist/index.cjs",
+      "ignore": ["node:fs", "node:fs/promises", "node:path", "fs", "fs/promises", "path"],
+      "limit": "9 KB"
+    },
+    {
+      "name": "core only — defineKeyless + envProvider",
+      "path": "dist/index.js",
+      "import": "{ defineKeyless, envProvider, z }",
+      "ignore": ["node:fs", "node:fs/promises", "node:path", "fs", "fs/promises", "path"],
+      "limit": "5 KB"
+    }
+  ]
 }

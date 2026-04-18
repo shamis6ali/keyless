@@ -48,11 +48,24 @@ export type ErrorContext = {
   provider?: string;
 };
 
+export type RefreshFn = () => Promise<string>;
+
+export type KeyOverride = {
+  ttl?: TtlInput;
+  /**
+   * Custom fetcher that bypasses the provider chain for this key. Invoked on
+   * initial fetch and on every cache miss. Ideal for OAuth-style tokens that
+   * need to be renewed via a refresh_token exchange rather than re-fetched
+   * from a secret store.
+   */
+  refresh?: RefreshFn;
+};
+
 export type KeylessOptions<S extends SchemaMap> = {
   schema: S;
   providers: Provider[];
   cache?: CacheOptions;
-  overrides?: { [K in keyof S]?: { ttl?: TtlInput } };
+  overrides?: { [K in keyof S]?: KeyOverride };
   mode?: KeylessMode;
   onAccess?: (key: keyof S & string, meta: AccessMeta) => void;
   onRefresh?: (key: keyof S & string) => void;
