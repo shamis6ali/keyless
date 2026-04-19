@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -70,6 +70,35 @@ describe("fileCache", () => {
     await waitForFlush();
     const raw = await readFile(path, "utf8");
     expect(JSON.parse(raw)).toEqual({});
+  });
+
+  it("writes the cache file with restrictive 0600 permissions", async () => {
+    if (process.platform === "win32") return;
+    const path = join(dir, "cache.json");
+    const cache = fileCache({ path });
+    const now = Date.now();
+    cache.set("K", { value: "v", cachedAt: now, expiresAt: now + 60_000 });
+    await waitForFlush();
+    const info = await stat(path);
+    // Mask off file-type bits, compare permission bits only.
+    expect(info.mode & 0o777).toBe(0o600);
+  });
+
+  it("tightens permissions of a pre-existing looser file on next write", async () => {
+    if (process.platform === "win32") return;
+    const path = join(dir, "cache.json");
+    // Pre-create with world-readable mode 0644.
+    await writeFile(path, "{}", { encoding: "utf8", mode: 0o644 });
+    const before = await stat(path);
+    expect(before.mode & 0o777).toBe(0o644);
+
+    const cache = fileCache({ path });
+    const now = Date.now();
+    cache.set("K", { value: "v", cachedAt: now, expiresAt: now + 60_000 });
+    await waitForFlush();
+
+    const after = await stat(path);
+    expect(after.mode & 0o777).toBe(0o600);
   });
 
   it("creates parent directories on first write", async () => {

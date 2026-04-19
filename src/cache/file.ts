@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Cache, CacheEntry } from "../types";
+
+const FILE_MODE = 0o600;
 
 export type FileCacheOptions = {
   /** Absolute path to the cache file. Parent directories are created on first write. */
@@ -60,7 +62,20 @@ export function fileCache(options: FileCacheOptions): Cache {
           if (entry.expiresAt > now) payload[key] = entry;
         }
         await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, JSON.stringify(payload), "utf8");
+        await writeFile(path, JSON.stringify(payload), {
+          encoding: "utf8",
+          mode: FILE_MODE,
+        });
+        // writeFile's `mode` only applies on file creation. chmod afterwards
+        // ensures pre-existing files (e.g. created with a looser umask before
+        // an upgrade) are tightened to 0600 too. Best-effort on platforms
+        // where chmod is a no-op (Windows).
+        try {
+          await chmod(path, FILE_MODE);
+        } catch {
+          // Non-POSIX filesystems may reject chmod; the warning in the file
+          // header already tells users not to put this on shared storage.
+        }
       });
   }
 
