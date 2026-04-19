@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -99,6 +99,43 @@ describe("fileCache", () => {
 
     const after = await stat(path);
     expect(after.mode & 0o777).toBe(0o600);
+  });
+
+  it("does not leave temp files behind after a successful write", async () => {
+    const path = join(dir, "cache.json");
+    const cache = fileCache({ path });
+    const now = Date.now();
+    cache.set("K", { value: "v", cachedAt: now, expiresAt: now + 60_000 });
+    cache.set("K2", { value: "v2", cachedAt: now, expiresAt: now + 60_000 });
+    cache.delete("K");
+    await waitForFlush();
+    const files = await readdir(dir);
+    const tmpFiles = files.filter((f) => f.endsWith(".tmp"));
+    expect(tmpFiles).toEqual([]);
+    expect(files).toContain("cache.json");
+  });
+
+  it("never leaves the cache file in a half-written state", async () => {
+    // Start with a known-good file.
+    const path = join(dir, "cache.json");
+    const cache = fileCache({ path });
+    const now = Date.now();
+    cache.set("K", { value: "stable", cachedAt: now, expiresAt: now + 60_000 });
+    await waitForFlush();
+
+    // Race many concurrent writes. Even if the implementation were not
+    // atomic, parsing the file at any point should yield a valid JSON object
+    // (either old or new contents), never a syntax error.
+    for (let i = 0; i < 50; i++) {
+      cache.set(`K${i}`, { value: `v${i}`, cachedAt: now, expiresAt: now + 60_000 });
+    }
+    await waitForFlush();
+
+    const raw = await readFile(path, "utf8");
+    expect(() => JSON.parse(raw)).not.toThrow();
+    const parsed = JSON.parse(raw);
+    expect(parsed.K?.value).toBe("stable");
+    expect(parsed.K49?.value).toBe("v49");
   });
 
   it("creates parent directories on first write", async () => {

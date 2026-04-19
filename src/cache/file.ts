@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Cache, CacheEntry } from "../types";
 
@@ -62,20 +62,26 @@ export function fileCache(options: FileCacheOptions): Cache {
           if (entry.expiresAt > now) payload[key] = entry;
         }
         await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, JSON.stringify(payload), {
+        // Write to a per-process temp file then rename onto the final path.
+        // rename(2) is atomic on POSIX (same filesystem) and on Windows for
+        // files, so a concurrent reader sees either the old contents or the
+        // new contents but never a half-written file. A crash mid-write
+        // leaves an orphaned .tmp file but the real cache stays intact.
+        const tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+        await writeFile(tmpPath, JSON.stringify(payload), {
           encoding: "utf8",
           mode: FILE_MODE,
         });
-        // writeFile's `mode` only applies on file creation. chmod afterwards
-        // ensures pre-existing files (e.g. created with a looser umask before
-        // an upgrade) are tightened to 0600 too. Best-effort on platforms
-        // where chmod is a no-op (Windows).
+        // writeFile's `mode` only applies on file creation. chmod the temp
+        // explicitly so the renamed file has the right permissions even on
+        // filesystems that ignore the mode flag. Best-effort on Windows.
         try {
-          await chmod(path, FILE_MODE);
+          await chmod(tmpPath, FILE_MODE);
         } catch {
           // Non-POSIX filesystems may reject chmod; the warning in the file
           // header already tells users not to put this on shared storage.
         }
+        await rename(tmpPath, path);
       });
   }
 
