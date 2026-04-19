@@ -23,6 +23,33 @@ describe("parseDotenv", () => {
       URL: "postgres://user:pass=word@host",
     });
   });
+
+  it("does not pollute Object.prototype via __proto__ assignment", () => {
+    // Snapshot Object.prototype before the attack attempt so we can detect
+    // any unexpected additions.
+    const before = Object.getOwnPropertyNames(Object.prototype).sort();
+    const result = parseDotenv("__proto__=pwned\nNORMAL=ok");
+    const after = Object.getOwnPropertyNames(Object.prototype).sort();
+
+    expect(after).toEqual(before);
+    // A fresh object should not have inherited a `pwned` property.
+    expect(({} as Record<string, unknown>).pwned).toBeUndefined();
+    // The benign key should still be parsed.
+    expect(result.NORMAL).toBe("ok");
+    // The dangerous key should not appear in the result at all.
+    expect(Object.keys(result)).not.toContain("__proto__");
+  });
+
+  it("ignores constructor and prototype as keys", () => {
+    const result = parseDotenv("constructor=evil\nprototype=bad\nOK=fine");
+    expect(Object.keys(result)).toEqual(["OK"]);
+    expect(result.OK).toBe("fine");
+  });
+
+  it("returns a null-prototype object so spread does not inherit pollution", () => {
+    const result = parseDotenv("FOO=bar");
+    expect(Object.getPrototypeOf(result)).toBeNull();
+  });
 });
 
 describe("dotenvProvider", () => {

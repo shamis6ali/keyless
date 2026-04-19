@@ -44,8 +44,17 @@ export function dotenvProvider(options: DotenvProviderOptions = {}): Provider {
   };
 }
 
+// Keys that would corrupt Object.prototype or downstream code if assigned
+// to a regular object. Blocked even though we use a null-prototype object —
+// belt and suspenders, in case the returned value is spread into an object
+// literal by a caller (e.g. `{ ...parseDotenv(src) }`) which would reattach
+// the default prototype.
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 export function parseDotenv(src: string): Record<string, string> {
-  const out: Record<string, string> = {};
+  // Null-prototype object: assignments to `__proto__` / `constructor` land
+  // as own properties rather than mutating Object.prototype.
+  const out = Object.create(null) as Record<string, string>;
   for (const rawLine of src.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
@@ -53,6 +62,7 @@ export function parseDotenv(src: string): Record<string, string> {
     if (eq === -1) continue;
     const key = line.slice(0, eq).trim();
     if (!key) continue;
+    if (UNSAFE_KEYS.has(key)) continue;
     let value = line.slice(eq + 1).trim();
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
